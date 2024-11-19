@@ -2,6 +2,8 @@ const express = require('express');
 const sqlite = require('sqlite');
 const sqlite3 = require('sqlite3');
 const path = require('path');
+const GreetingRequest = require('./models/GreetingRequest');
+const GreetingResponse = require('./models/GreetingResponse');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -69,28 +71,50 @@ let db;
     }
 })();
 
-// GET all users
-app.get('/api/users', async (req, res) => {
+// GET all timesOfDay
+app.get('/api/GetAllTimesOfDay', async (req, res) => {
     try {
-        const users = await db.all('SELECT * FROM users');
-        res.json({ message: 'success', data: users });
+        const timesOfDay = await db.all('SELECT DISTINCT timeOfDay FROM greetings');
+        res.json({ message: 'success', data: timesOfDay });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// POST a new user
-app.post('/api/users', async (req, res) => {
-    const { name, email } = req.body;
-    if (!name || !email) {
-        return res.status(400).json({ error: 'Name and email are required' });
-    }
-
+// GET all supported languages
+app.get('/api/GetSupportedLanguages', async (req, res) => {
     try {
-        const result = await db.run('INSERT INTO users (name, email) VALUES (?, ?)', [name, email]);
-        res.json({ message: 'success', data: { id: result.lastID, name, email } });
+        const languages = await db.all('SELECT DISTINCT language FROM greetings');
+        res.json({ message: 'success', data: languages });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// POST a new greeting
+app.post('/Greet', async (req, res) => {
+    try {
+        const { timeOfDay, language, tone } = req.body;
+        const greetingRequest = new GreetingRequest(timeOfDay, language, tone);
+
+        const result = await db.get(`
+            SELECT greetingMessage
+            FROM greetings
+            WHERE timeOfDay = ? AND language = ? AND tone = ?`,
+            [greetingRequest.timeOfDay, greetingRequest.language, greetingRequest.tone]
+        );
+
+        if (!result) {
+            res.status(404).json({
+                greetingMessage: `No greeting found for ${greetingRequest.timeOfDay} in ${greetingRequest.language} with a ${greetingRequest.tone} tone`
+            });
+        } else {
+            const greetingResponse = new GreetingResponse(result.greetingMessage);
+            res.json(greetingResponse);
+        }
+    } catch (error) {
+        console.error('Error processing request:', error);
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
